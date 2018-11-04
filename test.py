@@ -1,59 +1,65 @@
-from utils import string_process
-from utils import load_review_test
+from utils import string_process, get_fields, load_embeddings
 from torchtext import data
-import torch
+import random
 import pandas as pd
 import argparse
-from train import BATCH_SIZE, EMBEDDING_DIM, HIDDEN_DIM
 import jieba
+import ipdb
+from utils import make_out_dir, get_Model_Name
+from create_model import create_model
 from models import *
 
+
+# ipdb.set_trace()
+torch.manual_seed(1)
+random.seed(1)
+
 args = argparse.ArgumentParser()
-args.add_argument('--m', dest='model', default='bilstm', help='specify the mode to use (default: lstm)')
+args.add_argument('--cu', dest='CUDA_NUM', type=str)
+args.add_argument('--m', dest='model', help='specify the mode to use (default: lstm)')
+args.add_argument('--attn', dest='attn_method', help='general, dot, concat')
+args.add_argument('--emdim', dest='EMBEDDING_DIM', type=int)
+args.add_argument('--hdim', dest='HIDDEN_DIM', type=int)
+args.add_argument('--bsize', dest='BATCH_SIZE', type=int)
+args.add_argument('--p', dest='paral', default=False, type=bool)
+args.add_argument('--id', dest='TASK_ID', default=0, type=str)
 args = args.parse_args()
 
+USE_GPU = torch.cuda.is_available()
+cuda_str = 'cuda:' + args.CUDA_NUM
+DEVICE = torch.device(cuda_str if USE_GPU else "cpu")
+
+dic_data, text_fields, label_field = get_fields()
+pre_embedding, vocab_ls, vocab_dic = load_embeddings(args, text_fields, emb_file='new_embed')
+
+text_fields['test'].vocab.itos = vocab_ls
+text_fields['test'].vocab.stoi = vocab_dic
+
+test_iter, = \
+    data.BucketIterator.splits((dic_data['test'], ), batch_sizes=(args.BATCH_SIZE, ),
+                               sort_key=lambda x: len(x.text), repeat=False, device=DEVICE)
+
 DISCARD = [' ', '\xa0', '\u3000', '\u200a']
+LABELS = ['-2', '-1', '0', '1']
 df = pd.read_csv('data/testset.csv', header=0, encoding='utf-8')
 ls_senten = [string_process(df.iloc[row, 1]) for row in range(len(df))]
 
-USE_GPU = torch.cuda.is_available()
-print('testing....')
+ls_check = [[vocab_dic[st.lower()] for st in jieba.cut(senten) if st not in DISCARD] for senten in ls_senten]
+ls_sent_len = [len(se) for se in ls_check]
+print('Maximum length of testset is {}\n'.format(max(ls_sent_len)))
+
+model = create_model(args, vocab_ls, label_field, USE_GPU, DEVICE)
 
 for i in range(20):
-  cuda_str = "cuda:" + str(i % 8)
-  DEVICE = torch.device(cuda_str if torch.cuda.is_available() else "cpu")
+  print('Start testing for task {}'.format(i))
+  args.TASK_ID = str(i)
+  out_dir = make_out_dir(args)
+  print('Loading model from {}'.format(out_dir))
+  model.load_state_dict(torch.load(out_dir + '/best_model.pth'))
+  print('Complete loading')
 
-  text_field = data.Field(lower=True)
-  label_field = data.Field(sequential=False)
-
-  train_iter, dev_iter, test_iter = load_review_test(text_field, label_field, BATCH_SIZE)
-
-  idx2word = text_field.vocab.itos
-  word2idx = text_field.vocab.stoi
-
-  ls_check = [[word2idx[st.lower()] for st in jieba.cut(senten) if st not in DISCARD] for senten in ls_senten]
-
-  if args.model == 'lstm':
-      model = LSTMSentiment(embedding_dim=EMBEDDING_DIM, hidden_dim=HIDDEN_DIM,
-                      vocab_size=len(text_field.vocab), label_size=len(label_field.vocab)-1,
-                      use_gpu=USE_GPU, batch_size=BATCH_SIZE, devic=DEVICE)
-
-  if args.model == 'bilstm':
-      model = BiLSTMSentiment(embedding_dim=EMBEDDING_DIM, hidden_dim=HIDDEN_DIM, vocab_size=len(text_field.vocab), label_size=len(label_field.vocab)-1,\
-                            use_gpu=USE_GPU, batch_size=BATCH_SIZE)
-
-  if args.model == 'gru':
-    embedding = nn.Embedding(len(text_field.vocab), EMBEDDING_DIM)
-    model = GRUSentiment(hidden_size=HIDDEN_DIM, embedding=embedding, n_layers=1, dropout=0)
-
-  if args.paral:
-    model = nn.DataParallel(model)
-
-  model.to(DEVICE)
-  model.load_state_dict(torch.load('model' + str(i) + '/best_model.pth'))
-  for batch in test_iter:
-    sent, label = batch.text, batch.label
-    model.batch_size = len(label.data)
+  for num_iter, batch in enumerate(test_iter):
+    sent = batch.text
     pred = model(torch.transpose(sent, 0, 1))
     pred_label = pred.data.max(1)[1]
     ls_pred = pred_label.tolist()
@@ -62,9 +68,16 @@ for i in range(20):
     # ls_sentence = [''.join([idx2word[it] for it in sent_ls[itt] if it != 1]) for itt in range(len(sent_ls))]
     for tt, unpad_sent in enumerate(unpad_sent_ls):
       if unpad_sent not in ls_check:
-        import ipdb
         ipdb.set_trace()
         print('hhhh')
       df.iloc[ls_check.index(unpad_sent), i+2] = label_field.vocab.itos[ls_pred[tt] + 1]
 
-df.to_csv('data/test/result.csv', encoding='utf_8_sig', index=False)
+  for roww in range(len(df)):
+    if df.iloc[roww, i+2] not in LABELS:
+      ipdb.set_trace()
+
+  print('Complete testing for task {} in {} iterations\n'.format(i, num_iter))
+
+result_path = 'results/' + get_Model_Name(args) + '.csv'
+print('Writing result to {}'.format(result_path))
+df.to_csv(result_path, encoding='utf_8_sig', index=False)
