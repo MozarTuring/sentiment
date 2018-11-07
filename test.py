@@ -1,11 +1,12 @@
-from utils import string_process, get_fields, load_embeddings
+from utils import string_process, get_fields
+from vocab_embed import load_embeddings
 from torchtext import data
 import random
 import pandas as pd
-import argparse
 import jieba
 import ipdb
-from utils import make_out_dir, get_Model_Name
+from utils import make_out_dir, get_Model_Name, get_cuda
+from get_args import *
 from create_model import create_model
 from models import *
 
@@ -14,20 +15,9 @@ from models import *
 torch.manual_seed(1)
 random.seed(1)
 
-args = argparse.ArgumentParser()
-args.add_argument('--cu', dest='CUDA_NUM', type=str)
-args.add_argument('--m', dest='model', help='specify the mode to use (default: lstm)')
-args.add_argument('--attn', dest='attn_method', help='general, dot, concat')
-args.add_argument('--emdim', dest='EMBEDDING_DIM', type=int)
-args.add_argument('--hdim', dest='HIDDEN_DIM', type=int)
-args.add_argument('--bsize', dest='BATCH_SIZE', type=int)
-args.add_argument('--p', dest='paral', default=False, type=bool)
-args.add_argument('--id', dest='TASK_ID', default=0, type=str)
-args = args.parse_args()
+args = get_args_cnn()
 
-USE_GPU = torch.cuda.is_available()
-cuda_str = 'cuda:' + args.CUDA_NUM
-DEVICE = torch.device(cuda_str if USE_GPU else "cpu")
+USE_GPU, DEVICE = get_cuda(args)
 
 dic_data, text_fields, label_field = get_fields()
 pre_embedding, vocab_ls, vocab_dic = load_embeddings(args, text_fields, emb_file='new_embed')
@@ -35,9 +25,8 @@ pre_embedding, vocab_ls, vocab_dic = load_embeddings(args, text_fields, emb_file
 text_fields['test'].vocab.itos = vocab_ls
 text_fields['test'].vocab.stoi = vocab_dic
 
-test_iter, = \
-    data.BucketIterator.splits((dic_data['test'], ), batch_sizes=(args.BATCH_SIZE, ),
-                               sort_key=lambda x: len(x.text), repeat=False, device=DEVICE)
+test_iter, = data.BucketIterator.splits((dic_data['test'], ), batch_sizes=(args.BATCH_SIZE, ),
+                                        sort_key=lambda x: len(x.text), repeat=False, device=DEVICE)
 
 DISCARD = [' ', '\xa0', '\u3000', '\u200a']
 LABELS = ['-2', '-1', '0', '1']

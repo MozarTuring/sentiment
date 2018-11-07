@@ -91,3 +91,26 @@ class GRUSentiment(nn.Module):
     outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]
     # Return output and final hidden state
     return outputs, hidden
+
+class CNNSentiment(nn.Module):
+  def __init__(self, vocab_size, embedding_dim, n_filters, filter_sizes, output_dim, dropout):
+    super().__init__()
+
+    self.hdim = 100
+    self.embeddings = nn.Embedding(vocab_size, embedding_dim)
+    self.convs = nn.ModuleList(
+      [nn.Conv2d(in_channels=1, out_channels=n_filters, kernel_size=(fs, embedding_dim)) for fs in filter_sizes])
+    self.fc1 = nn.Linear(len(filter_sizes) * n_filters, self.hdim)
+    self.fc2 = nn.Linear(self.hdim, output_dim)
+    self.dropout = nn.Dropout(dropout)
+
+  def forward(self, x):
+    # x = x.permute(1, 0)
+    embedded = self.embeddings(x)
+    embedded = embedded.unsqueeze(1)
+    conved = [F.relu(conv(embedded)).squeeze(3) for conv in self.convs]
+    pooled = [F.max_pool1d(conv, conv.shape[2]).squeeze(2) for conv in conved]
+    cat = self.dropout(torch.cat(pooled, dim=1))
+    h1 = self.fc1(cat)
+    h2 = self.fc2(h1)
+    return F.log_softmax(h2, dim=1)
