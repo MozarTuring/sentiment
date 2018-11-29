@@ -1,5 +1,8 @@
+import argparse
 import random
 import time
+import numpy as np
+from utils import get_fields
 from collections import defaultdict
 
 
@@ -10,7 +13,7 @@ def filter_embed_txt(embed_file, text_fields, new_embed):
   t = 0
   for line in rf:
     t += 1
-    if t % 1000 == 0:
+    if t % 10000 == 0:
       print(t)
     tokens = line.strip().split(" ")
     word = tokens[0]
@@ -40,51 +43,88 @@ def load_embed_txt(embed_file):
   return emb_dict, emb_size
 
 
-def load_embeddings(args, text_fields, logger, emb_file=None):
+def load_embeddings(embedding_dim, text_fields, logger=None, emb_file=None):
   def _return_unk():
-    return text_fields['train'].vocab.stoi['<unk>']
+    return 0
 
-  vocab_dic = defaultdict(_return_unk)
-
-  if emb_file:
-    logger.info('load pre-trained word embeddings')
-    start_time = time.time()
-    emb_dic, _ = load_embed_txt(emb_file)
-    logger.info('complete loading embeddings in {} seconds'.format(time.time() - start_time))
-    pretrained_embeddings = []
+  if not emb_file:
+    if logger:
+      logger.info('Randomly initialize word embeddings')
+    else:
+      print('Randomly initialize word embeddings')
     vocab_list = []
-    count = 0
+    for tr in text_fields['train'].vocab.itos:
+      vocab_list.append(tr)
+    for de in text_fields['dev'].vocab.itos:
+      vocab_list.append(de)
+    for te in text_fields['test'].vocab.itos:
+      vocab_list.append(te)
+    vocab_dic = {w: i for i, w in enumerate(vocab_list)}
+    # pretrained_embeddings = np.random.uniform(-0.25, 0.25, (len(vocab_list), embedding_dim))
+    # pretrained_embeddings[0] = 0
+    pretrained_embeddings = None
+    return pretrained_embeddings, vocab_list, vocab_dic
+  else:
+    vocab_dic = defaultdict(_return_unk)
+    emb_dic, _ = load_embed_txt(emb_file)
+    pretrained_embeddings = []
+    vocab_list = ['<unk>', '<pad>']
+    vocab_dic['<unk>'] = 0
+    vocab_dic['<pad>'] = 1
+    pretrained_embeddings.append([random.random() for _ in range(embedding_dim)])
+    pretrained_embeddings.append([random.random() for _ in range(embedding_dim)])
+    count1 = 0
+    wf = open('un_token', 'w', encoding='utf8')
     for word in text_fields['train'].vocab.itos:
-      vocab_list.append(word)
-      vocab_dic[word] = len(vocab_dic)
       if word in emb_dic:
+        vocab_list.append(word)
+        vocab_dic[word] = len(vocab_dic)
         pretrained_embeddings.append(emb_dic[word])
       else:
-        count += 1
-        pretrained_embeddings.append([random.random() for _ in range(args.EMBEDDING_DIM)])
+        wf.write(word + '\n')
+        count1 += 1
+        # pretrained_embeddings.append([random.random() for _ in range(embedding_dim)])
 
-    logger.info('Train vocabulary size: {}, unknown tokens: {}'.format(len(text_fields['train'].vocab.itos), count))
-
-    count = 0
+    count2 = 0
     for word in text_fields['dev'].vocab.itos:
       if word not in emb_dic and word not in vocab_dic:
-        count += 1
+        count2 += 1
+        wf.write(word + '\n')
       if word in emb_dic and word not in vocab_dic:
         vocab_list.append(word)
         vocab_dic[word] = len(vocab_dic)
         pretrained_embeddings.append(emb_dic[word])
 
-    logger.info('Dev vocabulary size: {}, unknown tokens: {}'.format(len(text_fields['dev'].vocab.itos), count))
-
-    count = 0
+    count3 = 0
     for word in text_fields['test'].vocab.itos:
       if word not in emb_dic and word not in vocab_dic:
-        count += 1
+        count3 += 1
+        wf.write(word + '\n')
       if word in emb_dic and word not in vocab_dic:
         vocab_list.append(word)
         vocab_dic[word] = len(vocab_dic)
         pretrained_embeddings.append(emb_dic[word])
 
-    logger.info('Test vocabulary size: {}, unknown tokens: {}'.format(len(text_fields['test'].vocab.itos), count))
+    if logger:
+      logger.info('Train vocabulary size: {}, {} of them are not in {}'.format(len(text_fields['train'].vocab.itos), count1, emb_file))
+      logger.info('Dev vocabulary size: {}, unknown tokens: {}'.format(len(text_fields['dev'].vocab.itos), count2))
+      logger.info('Test vocabulary size: {}, unknown tokens: {}'.format(len(text_fields['test'].vocab.itos), count3))
+    else:
+      print('Train vocabulary size: {}, {} of them are not in {}'.format(len(text_fields['train'].vocab.itos), count1, emb_file))
+      print('Dev vocabulary size: {}, unknown tokens: {}'.format(len(text_fields['dev'].vocab.itos), count2))
+      print('Test vocabulary size: {}, unknown tokens: {}'.format(len(text_fields['test'].vocab.itos), count3))
 
+    wf.close()
     return pretrained_embeddings, vocab_list, vocab_dic
+
+
+if __name__ == '__main__':
+  args = argparse.ArgumentParser()
+  args.add_argument('--split', dest='split', type=str)
+  args = args.parse_args()
+  split = args.split
+  dic_data, text_fields, label_field = get_fields('data/'+split+'/',)
+  embed_file = 'embed3'
+  new_embed_file = split + '_' + embed_file
+  filter_embed_txt(embed_file, text_fields, new_embed_file)
+  load_embeddings(200, text_fields, emb_file=new_embed_file)

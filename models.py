@@ -97,6 +97,7 @@ class CNNSentiment(nn.Module):
     super().__init__()
 
     self.hdim = 100
+    self.bns = nn.ModuleList([nn.BatchNorm1d(n_filters) for _ in filter_sizes])
     self.embeddings = nn.Embedding(vocab_size, embedding_dim)
     self.convs = nn.ModuleList(
       [nn.Conv2d(in_channels=1, out_channels=n_filters, kernel_size=(fs, embedding_dim)) for fs in filter_sizes])
@@ -108,7 +109,7 @@ class CNNSentiment(nn.Module):
     # x = x.permute(1, 0)
     embedded = self.embeddings(x)
     embedded = embedded.unsqueeze(1)
-    conved = [F.relu(conv(embedded)).squeeze(3) for conv in self.convs]
+    conved = [F.relu(self.bns[i](conv(embedded).squeeze(3))) for i, conv in enumerate(self.convs)]
     pooled = [F.max_pool1d(conv, conv.shape[2]).squeeze(2) for conv in conved]
     cat = self.dropout(torch.cat(pooled, dim=1))
     h1 = self.fc1(cat)
