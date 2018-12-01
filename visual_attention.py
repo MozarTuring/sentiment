@@ -8,7 +8,7 @@ myfont = FontProperties(fname='/usr/share/fonts/truetype/droid/DroidSansFallback
 
 def showAttention(input_sentence, output_words, attentions, i):
   # Set up figure with colorbar
-  print(attentions)
+  # print(attentions)
   fig = plt.figure()
   ax = fig.add_subplot(111)
   cax = ax.matshow(attentions.numpy(), cmap='bone')

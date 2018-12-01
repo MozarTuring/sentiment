@@ -74,13 +74,14 @@ def get_weight(train_iter):
   return weight
 
 
-def get_weights(train_iter, label_field):
+def get_weights(train_iter, label_field, vocab_ls):
   SHAPE_COARSE = (6, 3)
   SHAPE_FINE = (20, 4)
   all_label = torch.zeros(SHAPE_FINE)
   all_coarse = torch.zeros(SHAPE_COARSE)
   for i, batch in enumerate(train_iter):
     label = batch.label
+    # print([vocab_ls[ww] for ww in batch.text[:, 0].tolist()])
     label.data.sub_(2)
     coarse_label = map2coarse(label.transpose(0, 1).tolist(), label_field)
     for j, lab in enumerate(label.tolist()):
@@ -122,6 +123,7 @@ def get_logger(out_dir,):
   return logger
 
 
+SEP = '#SEP#'
 def string_process(string):
   # string = string.replace(',', '<sep>')
   # string = string.replace('，', '<sep>')
@@ -129,10 +131,12 @@ def string_process(string):
   # string = string.replace(' ', '<sep>')
   string = string.strip('"')
   string = re.sub('\d', '0', string)
-  string = re.sub(r"[{}]+".format(punctuation), '<sep>', string)
-  string = string.replace('\n', '<sep>')
-  string = string.replace('\r', '<sep>')
-  string = string.replace('\t', '<sep>')
+  string = re.sub(r"[{}]+".format(punctuation), SEP, string)
+  string = string.replace('\n', SEP)
+  string = string.replace('\r', SEP)
+  string = string.replace('\t', SEP)
+  string = re.sub('#SEP#$', '', string)
+  string = re.sub('^#SEP#', '', string)
   return string
 
 
@@ -156,7 +160,7 @@ def make_out_dir(args, NUM_ELE):
   elif NUM_ELE == 20:
     dir_name = 'task/' + model_name + '/running'
   elif NUM_ELE == 26:
-    dir_name = 'together/' + model_name + '/running'
+    dir_name = 'sentence/coarse/' + model_name + '/running'
   out_dir = os.path.abspath(os.path.join(os.path.curdir, dir_name))
   if not os.path.exists(out_dir):
     os.makedirs(out_dir)
@@ -199,7 +203,7 @@ def get_fields(path, taskid=None, mode=None):
     if mode == 'test':
       dir_name = path + 'testb/'
     else:
-      dir_name = path + 'ch_review/'
+      dir_name = path + 'fine/'
   else:
     dir_name = path + 'ch_review' + taskid + '/'
 
@@ -278,10 +282,10 @@ def epoch_progress(model, train_iter, loss_functions, label_field, DEVICE, optim
     coarse_ls += pred_label[1].transpose(0, 1).reshape(-1, ).tolist() # pred_label[1].shape is 6 * batch_size
     model.zero_grad()
     loss = 0
-    for i in range(20):
-      loss += loss_functions[i](pred[0][i], label[i])
+    # for i in range(20):
+    #   loss += loss_functions[i](pred[0][i], label[i])
     for i in range(6):
-      loss += 2*loss_functions[20+i](pred[1][i], coarse_label[i])
+      loss += loss_functions[20+i](pred[1][i], coarse_label[i])
     avg_loss += loss.data
     count += 1
     if optimizer:

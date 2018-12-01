@@ -2,12 +2,13 @@ from torch.utils.data import Dataset
 import pandas as pd
 import sys
 import time
-from utils import string_process
+from utils import string_process, SEP
 import os
 import jieba
 # from pyhanlp import *
 
 
+jieba.add_word(SEP)
 class fsaourDataset(Dataset):
   """Face Landmarks dataset."""
 
@@ -74,6 +75,9 @@ def gendata(csv_file, path, sub, split_tool=None, i=None):
         out.write(st + ' ')
       out.write('\n') # '\t' + ' '.join(map(str, dic['label'])) +
     elif split_tool == 'sentence':
+      # if set(['味道','不错','很','划算']).issubset(dic['content'].split()) and len(dic['content'].split()) < 50:
+      #   import ipdb
+      #   ipdb.set_trace()
       out.write(' '.join(jieba.cut(string_process(dic['content']))) + '\t' + ' '.join(map(str, dic['label'])) + '\n')
 
   out.close()
@@ -90,7 +94,7 @@ if __name__ == '__main__':
   split_tool = 'sentence'
   path = 'data/' + split_tool + '/'
   sub = 'fine'
-  # gendata('data/testsetb.csv', path, split_tool)
+  gendata('data/testsetb.csv', path, sub, split_tool)
   if not os.path.exists(path + sub):
     os.makedirs(path + sub)
   gendata('data/trainingset.csv', path, sub, split_tool)

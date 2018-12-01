@@ -68,9 +68,11 @@ def load_embeddings(embedding_dim, text_fields, logger=None, emb_file=None):
     vocab_dic = defaultdict(_return_unk)
     emb_dic, _ = load_embed_txt(emb_file)
     pretrained_embeddings = []
-    vocab_list = ['<unk>', '<pad>']
+    vocab_list = ['<unk>', '<pad>', '#sep#']
     vocab_dic['<unk>'] = 0
     vocab_dic['<pad>'] = 1
+    vocab_dic['#sep#'] = 2
+    pretrained_embeddings.append([random.random() for _ in range(embedding_dim)])
     pretrained_embeddings.append([random.random() for _ in range(embedding_dim)])
     pretrained_embeddings.append([random.random() for _ in range(embedding_dim)])
     count1 = 0

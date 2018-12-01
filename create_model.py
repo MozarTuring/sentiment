@@ -2,6 +2,7 @@ import models
 import models2
 import models3
 import models4
+import models5
 import torch.nn as nn
 
 
@@ -22,7 +23,7 @@ def create_model(args, vocab_ls, label_field, USE_GPU, DEVICE, NUM_ELE, logger=N
                                    use_gpu=USE_GPU, batch_size=args.BATCH_SIZE, devic=DEVICE)
 
   if args.model == 'bilstm_attention':
-    model = models4.BiLSTMSentiment(embedding_dim=args.EMBEDDING_DIM, hidden_dim=args.HIDDEN_DIM,
+    model = models5.BiLSTMSentiment(embedding_dim=args.EMBEDDING_DIM, hidden_dim=args.HIDDEN_DIM,
                                     vocab_size=len(vocab_ls), label_size=len(label_field.vocab.itos) - 2,
                                     use_gpu=USE_GPU, batch_size=args.BATCH_SIZE, devic=DEVICE,
                                     attn_method=args.attn_method, num_ele=NUM_ELE, dropout=args.dropout)
